@@ -20,6 +20,17 @@ namespace UseBedrolls
 		{
 			base.ExposeData();
 			Scribe_Collections.Look(ref placedBeds, "placedBeds", LookMode.Reference, LookMode.Reference);
+			placedBeds.RemoveAll(kvp => kvp.Key == null || kvp.Value == null);
+		}
+
+		public void Remove(Building_Bed bed)
+		{
+			foreach (KeyValuePair<Pawn, Building_Bed> kvp in placedBeds)
+				if (kvp.Value == bed)
+				{
+					placedBeds.Remove(kvp.Key);
+					return;
+				}
 		}
 
 		public static Pawn PlacedBedOwner(Map map, Building_Bed bed)

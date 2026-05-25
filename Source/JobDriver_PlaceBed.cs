@@ -82,25 +82,105 @@ namespace UseBedrolls
 
 	public class JobDriver_TakeBedroll : JobDriver_Uninstall
 	{
+	private float workLeft;
+	private float totalNeededWork;
 		public override void Notify_Starting()
 		{
 			base.Notify_Starting();
 			if(pawn.Map.designationManager.DesignationOn(Target)?.def != DesignationDefOf.Uninstall)
 				pawn.Map.designationManager.AddDesignation(new Designation(Target, DesignationDefOf.Uninstall));
+
+		}
+
+		protected override IEnumerable<Toil> MakeNewToils()
+		{
+			if (Designation != null)
+				this.FailOnThingMissingDesignation(TargetIndex.A, Designation);
+
+			this.FailOnForbidden(TargetIndex.A);
+
+			this.FailOn(() =>
+			{
+				CompExplosive comp;
+				return Building.TryGetComp(out comp) && comp.wickStarted;
+			});
+
+			yield return Toils_Goto.GotoCell(TargetIndex.A, Target is Building_Trap ? PathEndMode.OnCell : PathEndMode.Touch);
+
+			Toil doWork = ToilMaker.MakeToil(nameof(MakeNewToils))
+				.FailOnDestroyedNullOrForbidden(TargetIndex.A);
+
+			doWork.initAction = delegate
+			{
+				totalNeededWork = TotalNeededWork;
+				workLeft = totalNeededWork;
+
+				if (!Building.Spawned)
+					doWork.actor.jobs.curDriver.ReadyForNextToil();
+			};
+
+			doWork.tickIntervalAction = delegate (int delta)
+			{
+				workLeft -= pawn.GetStatValue(StatDefOf.ConstructionSpeed) * 1.7f * delta;
+				TickActionInterval(delta);
+				if (workLeft <= 0f)
+					doWork.actor.jobs.curDriver.ReadyForNextToil();
+			};
+
+			doWork.defaultCompleteMode = ToilCompleteMode.Never;
+
+			if (WorkEffecter != null)
+				doWork.WithEffect(WorkEffecter, TargetIndex.A);
+
+			doWork.WithProgressBar(TargetIndex.A, () => 1f - workLeft / totalNeededWork);
+			doWork.activeSkill = () => SkillDefOf.Construction;
+
+			yield return doWork;
+
+			Toil finish = ToilMaker.MakeToil(nameof(MakeNewToils));
+			finish.initAction = delegate
+			{
+				FinishedRemoving();
+			};
+			finish.defaultCompleteMode = ToilCompleteMode.Instant;
+
+			yield return finish;
 		}
 
 		protected override void FinishedRemoving()
 		{
 			Log.Message($"Removing placed beds for {pawn}");
-			Thing minifiedThing = Building.Uninstall();
 			pawn.Map.GetComponent<PlacedBedsMapComponent>().placedBeds.Remove(pawn);
-			pawn.inventory.innerContainer.TryAdd(minifiedThing.SplitOff(1));
+
+			Thing minifiedThing = FindExistingMinifiedBed();
+			if (minifiedThing == null && Building.Spawned)
+				minifiedThing = Building.Uninstall();
+
+			if (minifiedThing != null)
+			{
+				if (minifiedThing.Spawned)
+					pawn.inventory.GetDirectlyHeldThings().TryAdd(minifiedThing.SplitOff(1));
+				else if (pawn.inventory.innerContainer.Contains(minifiedThing))
+					Log.Message($"{pawn} already has {minifiedThing}");
+				else
+					pawn.inventory.innerContainer.TryAddOrTransfer(minifiedThing);
+			}
 
 			if(HomeBedComp.Get(pawn, out Building_Bed bed))
 			{
 				Log.Message($"Re-claming Home bed {bed} for {pawn}");
 				pawn.ClaimTheGoddamnBedOkay(bed);
 			}
+		}
+
+		private Thing FindExistingMinifiedBed()
+		{
+			Thing inventoryBed = pawn.inventory?.innerContainer?.FirstOrDefault(t => t.GetInnerIfMinified() == Building);
+			if (inventoryBed != null)
+				return inventoryBed;
+
+			return pawn.Map?.listerThings?.ThingsInGroup(ThingRequestGroup.MinifiedThing)
+				?.FirstOrDefault(t => t.GetInnerIfMinified() == Building);
 		}
 	}
 	

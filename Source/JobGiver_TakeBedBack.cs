@@ -28,8 +28,8 @@ namespace UseBedrolls
 			if (ShouldKeepPlacedBed(pawn)) return null;
 			
 			var placedBeds = pawn.Map.GetComponent<PlacedBedsMapComponent>().placedBeds;
-			if (placedBeds.TryGetValue(pawn, out Building_Bed bed))
-			{
+  			if (placedBeds.TryGetValue(pawn, out Building_Bed bed))
+			  {
 				Log.Message($"{pawn} taking back bed {bed}");
 				if (pawn.CanReserve(bed))
 					return new Job(JobDefOf.TakeBedroll, bed) { ignoreForbidden = true };

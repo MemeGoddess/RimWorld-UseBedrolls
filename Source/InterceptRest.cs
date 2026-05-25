@@ -150,10 +150,8 @@ namespace UseBedrolls
 
 		public static Thing GroundMinifedBed(Pawn sleepy_pawn)
 		{
-			Predicate<Thing> validator = delegate (Thing t)
-			{
-				return UseableBed(t, sleepy_pawn) && sleepy_pawn.CanReserveAndReach(t, PathEndMode.ClosestTouch, Danger.None);
-			};
+			Predicate<Thing> validator = t => !t.IsForbidden(sleepy_pawn) && UseableBed(t, sleepy_pawn) && sleepy_pawn.
+			CanReserveAndReach(t, PathEndMode.ClosestTouch, Danger.None);
 			List<Thing> groundBeds = sleepy_pawn.Map.listerThings.ThingsInGroup(ThingRequestGroup.MinifiedThing).FindAll(t => validator(t));
 			if (groundBeds.NullOrEmpty())
 				return null;
